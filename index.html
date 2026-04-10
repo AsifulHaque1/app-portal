@@ -95,11 +95,26 @@ function showSection(id){
 }
 
 async function init(){
+
   loginBox.style.display='none';
+
+  const userDoc = await db.collection('users').doc(currentUser.uid).get();
+  const userData = userDoc.data();
+
+  // 🔐 Role check
+  if(userData.role !== "admin"){
+    document.querySelector(".sidebar").innerHTML = `
+      <h2>📱 Apps</h2>
+      <button onclick="showSection('apps')">Apps</button>
+      <button onclick="logout()">Logout</button>
+    `;
+  }
+
   loadDashboard();
   loadUsers();
   loadChart();
   loadApps();
+
   showSection('dashboard');
 }
 
