@@ -4,8 +4,8 @@
   <title>Pro SaaS App Platform</title>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
@@ -101,6 +101,12 @@ async function init(){
   const userDoc = await db.collection('users').doc(currentUser.uid).get();
   const userData = userDoc.data();
 
+  // ❗ Safety check
+  if(!userData){
+    alert("User data not found. Contact admin.");
+    return;
+  }
+
   // 🔐 Role check
   if(userData.role !== "admin"){
     document.querySelector(".sidebar").innerHTML = `
@@ -110,12 +116,20 @@ async function init(){
     `;
   }
 
-  loadDashboard();
-  loadUsers();
-  loadChart();
-  loadApps();
+  // 🔥 Admin vs User load
+  if(userData.role === "admin"){
+    loadDashboard();
+    loadUsers();
+    loadChart();
+    showSection('dashboard');
+  }else{
+    document.getElementById('dashboard').style.display='none';
+    document.getElementById('analytics').style.display='none';
+    document.getElementById('users').style.display='none';
+    showSection('apps');
+  }
 
-  showSection('dashboard');
+  loadApps();
 }
 
 async function loadDashboard(){
@@ -185,7 +199,18 @@ async function loadApps(){
 }
 
 async function addApp(){
+
+  if(!appName.value || !appLink.value){
+    alert("Fill all fields");
+    return;
+  }
+
   const id = prompt("Enter app ID (example: app1)");
+
+  if(!id){
+    alert("App ID required");
+    return;
+  }
 
   await db.collection('apps').doc(id).set({
     name: appName.value,
@@ -219,7 +244,7 @@ async function download(appId){
     download_count: userData.download_count + 1
   });
 
-  alert("Downloading...");
+  console.log("Downloading...");
   window.location.href = appData.link;
 }
 
