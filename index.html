@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pro SaaS App Platform</title>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body { margin:0; font-family:Segoe UI; background:#0f172a; color:white; }
+    .layout { display:flex; }
+    .sidebar { width:220px; background:#020617; height:100vh; padding:20px; }
+    .sidebar button { width:100%; margin:5px 0; }
+    .main { flex:1; padding:20px; }
+    .card { background:#1e293b; padding:20px; border-radius:12px; margin-bottom:20px; }
+    input { width:100%; padding:8px; margin:5px 0; }
+    button { padding:8px; border:none; border-radius:6px; background:#3b82f6; color:white; cursor:pointer; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+<div class="sidebar">
+  <h2>🚀 Dashboard</h2>
+  <button onclick="showSection('dashboard')">Dashboard</button>
+  <button onclick="showSection('analytics')">Analytics</button>
+  <button onclick="showSection('apps')">Apps</button>
+  <button onclick="showSection('users')">Users</button>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<div class="main">
+
+<div class="card" id="loginBox">
+  <h3>Login</h3>
+  <input id="email" placeholder="Email">
+  <input id="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="dashboard" style="display:none">
+  <div class="card">
+    <h3>Overview</h3>
+    <p id="totalUsers"></p>
+    <p id="totalDownloads"></p>
+  </div>
+</div>
+
+<div id="analytics" style="display:none">
+  <div class="card">
+    <h3>Download Chart</h3>
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<div id="apps" style="display:none"></div>
+
+<div id="users" style="display:none">
+  <div class="card">
+    <h3>Manage Users</h3>
+    <div id="userList"></div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey:"AIzaSyAAe7c8C84waW7jXikKNEuC2l9v2ZV9_DI",
+  authDomain:"app-portaal.firebaseapp.com",
+  projectId:"app-portaal"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser;
+
+function login(){
+  auth.signInWithEmailAndPassword(email.value,password.value)
+  .then(res=>{currentUser=res.user; init();})
+  .catch(e=>alert(e.message));
+}
+
+function logout(){auth.signOut(); location.reload();}
+
+function showSection(id){
+  ['dashboard','analytics','apps','users'].forEach(s=>document.getElementById(s).style.display='none');
+  document.getElementById(id).style.display='block';
+}
+
+async function init(){
+  loginBox.style.display='none';
+  loadDashboard();
+  loadUsers();
+  loadChart();
+  loadApps();
+  showSection('dashboard');
+}
+
+async function loadDashboard(){
+  const snap = await db.collection('users').get();
+  let totalUsersCount = snap.size;
+  let totalDownloadsCount = 0;
+
+  snap.forEach(doc=>{
+    totalDownloadsCount += doc.data().download_count || 0;
+  });
+
+  document.getElementById('totalUsers').innerText = "Users: " + totalUsersCount;
+  document.getElementById('totalDownloads').innerText = "Downloads: " + totalDownloadsCount;
+}
+
+async function loadUsers(){
+  const snap = await db.collection('users').get();
+  userList.innerHTML='';
+
+  snap.forEach(doc=>{
+    const u = doc.data();
+    userList.innerHTML += `
+      <div>
+        ${doc.id} | DL: ${u.download_count}
+        <button onclick="resetDL('${doc.id}')">Reset</button>
+        <button onclick="deleteUser('${doc.id}')">Delete</button>
+      </div>
+    `;
+  });
+}
+
+async function resetDL(id){
+  await db.collection('users').doc(id).update({ download_count:0 });
+  loadUsers();
+}
+
+async function deleteUser(id){
+  await db.collection('users').doc(id).delete();
+  loadUsers();
+}
+
+async function loadApps(){
+  const snap = await db.collection('apps').get();
+
+  let html = `
+    <div class="card">
+      <h3>Apps</h3>
+      <input id="appName" placeholder="App Name">
+      <input id="appLink" placeholder="Google Drive Link">
+      <button onclick="addApp()">Add App</button>
+      <hr>
+  `;
+
+  snap.forEach(doc=>{
+    const app = doc.data();
+
+    html += `
+      <div style="margin-bottom:10px">
+        ${app.name}
+        <button onclick="download('${doc.id}')">Download</button>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  apps.innerHTML = html;
+}
+
+async function addApp(){
+  const id = prompt("Enter app ID (example: app1)");
+
+  await db.collection('apps').doc(id).set({
+    name: appName.value,
+    link: appLink.value
+  });
+
+  alert('App added');
+  loadApps();
+}
+
+async function download(appId){
+
+  const userRef = db.collection('users').doc(currentUser.uid);
+  const userDoc = await userRef.get();
+  const userData = userDoc.data();
+
+  if (new Date() > new Date(userData.expiry)) {
+    alert("Subscription expired");
+    return;
+  }
+
+  if (userData.download_count >= userData.max_download) {
+    alert("Download limit reached");
+    return;
+  }
+
+  const appDoc = await db.collection('apps').doc(appId).get();
+  const appData = appDoc.data();
+
+  await userRef.update({
+    download_count: userData.download_count + 1
+  });
+
+  alert("Downloading...");
+  window.location.href = appData.link;
+}
+
+async function loadChart(){
+  const snap = await db.collection('users').get();
+  let labels=[], data=[];
+
+  snap.forEach(doc=>{
+    labels.push(doc.id.substring(0,5));
+    data.push(doc.data().download_count || 0);
+  });
+
+  new Chart(document.getElementById('chart'),{
+    type:'bar',
+    data:{ labels:labels, datasets:[{ data:data }] }
+  });
+}
+</script>
+
+</body>
+</html>
